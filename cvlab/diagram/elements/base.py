@@ -29,16 +29,11 @@ class NormalElement(FunctionGuiElement, ThreadedElement):
 
 
 class InputElement(InputGuiElement, ThreadedElement):
-    def get_source(self, is_3d_image=False):
+    def get_source(self):
         name = self.__class__.__name__.lower()
         code = None
         outputs = list(self.outputs.keys())
         return name, code, outputs
-
-
-class InputElement3D(InputElement):
-    def __init__(self):
-        super().__init__(True)
 
 
 class SequenceToDataElement(NormalElement):
