@@ -11,6 +11,7 @@ from ..diagram.interface import *
 from .mimedata import *
 from . import image_preview
 from . import config
+from .parameters import *
 
 ALLOW_UPSIZE = True
 
@@ -62,7 +63,7 @@ Drag & drop to another element to connect their inputs/outputs"""
             else:
                 mime_data.setText(Mime.INCOMING_CONNECTION)
             drag.setMimeData(mime_data)
-            drag.setPixmap(QPixmap(1, 1))     # todo: can this hack be removed?
+            drag.setPixmap(QPixmap(1, 1))  # todo: can this hack be removed?
             drag.exec_()
 
     def dropEvent(self, e):
@@ -109,7 +110,7 @@ Drag & drop to another element to connect their inputs/outputs"""
 
     @pyqtSlot()
     def show_hint(self):
-        self.hint.setVisible(True) #to musi byc w tej kolejnosci, bo inaczej hint.width jest losowe :/
+        self.hint.setVisible(True)  # to musi byc w tej kolejnosci, bo inaczej hint.width jest losowe :/
         self.update_hint_position()
         self.hint.raise_()
 
@@ -149,6 +150,9 @@ Double click - open image preview in separate window or expand/collapse text pre
         self.image_dialogs_count = 0
         self.setToolTip(self.help)
 
+        self.layout_tmp = layout
+        self.param_3d_image = []
+
     def wheelEvent(self, event):
         assert isinstance(event, QWheelEvent)
         if event.modifiers() != QtCore.Qt.NoModifier:
@@ -187,11 +191,11 @@ Double click - open image preview in separate window or expand/collapse text pre
             return
         self.element.state_notified = False  # todo: this must be called by all slots connected to self.element.state_changed
         state = self.element.state
-        #if state == self.element.STATE_READY:
+        # if state == self.element.STATE_READY:
         #    self.update_previews(state)
-        #else:
+        # else:
         #    self.set_outdated()
-        self.update_previews(state) #todo: czy tak, czy lepiej powyzsze z komentarza?
+        self.update_previews(state)  # todo: czy tak, czy lepiej powyzsze z komentarza?
 
     def switch_visibility(self, value):
         if value is None:
@@ -213,9 +217,40 @@ Double click - open image preview in separate window or expand/collapse text pre
         for preview in self.previews:
             preview.update(True)
 
+    def create_3d_image_controls(self, img_id):
+        if len(self.param_3d_image) <= img_id:
+            self.param_3d_image.append({})
+
+        if len(self.param_3d_image[img_id]) != 2:
+            self.param_3d_image[img_id]["axis"] = ComboboxParameter("axis", [("Z", 0), ("Y", 1), ("X", 2)])
+            self.param_3d_image[img_id]["slicer"] = FloatParameter("slice", min_=0, max_=1, step=0.01)
+            # self.param_3d_image[img_id]["fast_edit"] = ComboboxParameter("type", [
+            #     ("No change", 0),
+            #     ("Truncate to 0-255", 10),
+            #     ("Truncate to 0-1", 20),
+            #     ("Scale contrast to 0-1", 21),
+            #     ("Mean -> 0.5 max/min -> 1/0", 22),
+            #     ("Divide by 255.0", 23),
+            #     ("0 -> 0.5, max/min -> 1/0", 30),
+            #    ])
+            for key, param in self.param_3d_image[img_id].items():
+                param.value_changed.connect(self.update)
+
+            # controls = [GuiComboboxParameter(self.param_3d_image[img_id]["fast_edit"], self.element),
+            controls = [GuiComboboxParameter(self.param_3d_image[img_id]["axis"], self.element),
+                      GuiFloatParameter(self.param_3d_image[img_id]["slicer"], self.element)]
+
+            layout = QVBoxLayout()
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+
+            layout.addLayout(controls[0])
+            layout.addLayout(controls[1])
+
+            self.layout_tmp.insertLayout(img_id+1, layout)
+
 
 class ActionImage(QLabel):
-
     DATA_TYPE_IMAGE = 0
     DATA_TYPE_TEXT = 1
     DATA_TYPE_VALUE = 3
@@ -226,8 +261,9 @@ class ActionImage(QLabel):
         self.previews_container = image_preview.previews_container
         self.id = len(image_preview.previews)
         self.element = self.previews_container.element
-        #todo: better Element number than object_id would be appreciated here
-        self.name = "{} {}, Output {}, Image {}".format(self.element.name, str(self.element.object_id), image_preview.output.name, str(self.id))
+        # todo: better Element number than object_id would be appreciated here
+        self.name = "{} {}, Output {}, Image {}".format(self.element.name, str(self.element.object_id),
+                                                        image_preview.output.name, str(self.id))
         self.__connected = False
         self.image_dialog = None
         self.data_type = ActionImage.DATA_TYPE_IMAGE
@@ -238,6 +274,8 @@ class ActionImage(QLabel):
         self.text_preview_expanded = False
 
     def set_image(self, arr):
+        arr = self.set_3d_image_params(arr[:])
+
         # remember not to modify arr !!!
         if self.data_type != ActionImage.DATA_TYPE_IMAGE:
             self.prepare_actions()
@@ -271,7 +309,7 @@ class ActionImage(QLabel):
 
     def preprocess_array(self, arr):
         if arr.dtype == np.uint16:
-            arr = cv.convertScaleAbs(arr, alpha=255.0/65535.0)
+            arr = cv.convertScaleAbs(arr, alpha=255.0 / 65535.0)
         elif arr.dtype != np.uint8:
             if arr.dtype in [np.float, np.float32, np.float64]:
                 arr = arr * 255.
@@ -312,7 +350,7 @@ class ActionImage(QLabel):
             self.element.diagram.element_deleted.connect(self.on_element_destroy)
             self.__connected = True
         if self.image_dialog is None:
-            image = self.image_preview.get_preview_objects()[self.id]
+            image = self.set_3d_image_params(self.image_preview.get_preview_objects()[self.id])
             self.image_dialog = image_preview.manager.manager.window(self.name, image=image, position='cursor')
             self.image_dialog.setImage(image)
             settings = config.ConfigWrapper.get_settings()
@@ -357,6 +395,71 @@ class ActionImage(QLabel):
         QObject.deleteLater(self)
         if self.image_dialog is not None:
             self.close_image_dialog()
+
+    def set_3d_image_params(self, arr):
+        # and len(self.previews_container.param_3d_image)
+        if len(arr.shape) == 3 and arr.shape[2] != 3:
+            self.previews_container.create_3d_image_controls(self.id)
+
+            param_3d_image = self.previews_container.param_3d_image[self.id]
+            axis = param_3d_image["axis"].value
+            slice_value = param_3d_image["slicer"].value
+            slice = int(round(slice_value * (arr.shape[axis] - 1)))
+            if axis == 0:
+                slice = arr[slice, ...]
+            elif axis == 1:
+                slice = arr[:, slice, ...]
+            elif axis == 2:
+                slice = arr[:, :, slice, ...]
+            else:
+                raise Exception("Unknown 'axis' parameter")
+
+            #type = param_3d_image["fast_edit"].value
+            #slice = self.fast_edit_3d_image_params(type, slice)
+
+            return slice
+        return arr
+
+    def fast_edit_3d_image_params(self, type, arr):
+        i = arr[:]
+        output = None
+        if type == 0:
+            output = i
+        elif type == 10:
+            output = i.clip(0, 255).astype(np.uint8)
+        elif type == 20:
+            output = i.astype(np.float32).clip(0.0, 1.0)
+        elif type == 21:
+            output = i.astype(np.float32)
+            min_, max_, _, _ = cv.minMaxLoc(output.flatten())
+            if min_ == max_:
+                output = np.zeros(output.shape) + 0.5
+            else:
+                output = (output - min_) / (max_ - min_) + min_
+        elif type == 22:
+            output = i.astype(np.float32)
+            min_, max_, _, _ = cv.minMaxLoc(output.flatten())
+            if min_ == max_:
+                output = np.zeros(output.shape) + 0.5
+            else:
+                if len(output.shape) > 2:
+                    mean = cv.mean(cv.mean(output)[:3])[0]
+                else:
+                    mean = cv.mean(output)[0]
+                scale = 0.5 / max(max_ - mean, mean - min_)
+                output = (output - mean) * scale + 0.5
+        elif type == 23:
+            output = i / 255.
+        elif type == 30:
+            output = i.astype(np.float32)
+            min_, max_, _, _ = cv.minMaxLoc(output.flatten())
+            if min_ == max_:
+                output = np.zeros(output.shape) + 0.5
+            else:
+                scale = 0.5 / max(max_, -min_)
+                output = output * scale + 0.5
+
+        return output
 
 
 class OutputPreview(QHBoxLayout):
@@ -410,6 +513,9 @@ class OutputPreview(QHBoxLayout):
     def set_outdated(self):
         # todo: implement this
         pass
+
+    def add_item(self, element):
+        self.addWidget(element)
 
 
 class NumberOutputHelper:
@@ -498,6 +604,7 @@ class ElementStatusBar(StyledWidget):
 
     @pyqtSlot()
     def update(self):
-        if not hasattr(self, "element"): return  # fixme: tymczasowy hack, bo leci w tym miejscu wyjątek, nie wiem czemu!
+        if not hasattr(self,
+                       "element"): return  # fixme: tymczasowy hack, bo leci w tym miejscu wyjątek, nie wiem czemu!
         self.element.state_notified = False  # todo: this must be called by all slots connected to self.element.state_changed
         self.set_status(self.element.message)

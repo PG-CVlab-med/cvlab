@@ -23,7 +23,7 @@ Double click - toggle previews
 Drag & drop - move element around"""
 
     def __init__(self):
-        super(GuiElement, self).__init__()
+        super().__init__()
         self.setObjectName("Element")
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.status_bar = ElementStatusBar(self)
@@ -536,10 +536,11 @@ class InputGuiElement(GuiElement):
         vb_main.base_spacing = 0
         self.create_preview(vb_main)
         self.setLayout(vb_main)
-
         self.create_switch_preview_action()
         self.create_menu_separator()
         self.create_duplicate_action()
         self.create_break_action()
         self.create_del_action()
+
+
 

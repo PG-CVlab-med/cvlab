@@ -45,7 +45,6 @@ class SequenceToDataElement(NormalElement):
         return units, outputs
 
 
-
 class MultiInputOneOutputElement(NormalElement):
     def get_attributes(self):
         return [Input("inputs", multiple=True)], [Output("output")], []
@@ -61,6 +60,7 @@ class MultiInputOneOutputElement(NormalElement):
 
 class SequenceToSequenceElement(NormalElement):
     num_outputs = 8
+
     def get_attributes(self):
         return [Input("inputs", multiple=True)], [Output("output")], []
 
