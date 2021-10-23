@@ -382,6 +382,7 @@ Drag & drop - move element around"""
             "show_preview": (self.preview.isVisible() if self.preview else None),
             "position": (self.pos().x()//dpi_factor, self.pos().y()//dpi_factor),
             "preview_size": self.preview.preview_size//dpi_factor,
+            "edit_option": self.preview.previews[-1].edit_option,
         }
         parent_d["gui_options"] = d
         return parent_d
@@ -397,12 +398,16 @@ Drag & drop - move element around"""
             and options["preview_size"] != self.preview.preview_size:
                 self.preview.preview_size = options["preview_size"] * dpi_factor
         self.switch_preview(options["show_preview"])
+        print("sd")
+        if "edit_option" in options:
+            self.preview.previews[-1].edit_option=options["edit_option"]
 
         self.move(options["position"][0]*dpi_factor,options["position"][1]*dpi_factor)
 
         Element.from_json(self, data)
         self.update_id()
         self.preview.force_update()
+
 
     def zoom(self, factor):
         assert isinstance(self.preview, PreviewsContainer)
