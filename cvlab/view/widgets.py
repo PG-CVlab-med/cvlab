@@ -9,7 +9,6 @@ from . import config
 from . import image_preview
 from .mimedata import *
 from .parameters import GuiFloatParameter, GuiComboboxParameter
-#from .styles import StyleManager
 from .. import CVLAB_DIR
 from ..diagram.interface import *
 
@@ -150,6 +149,7 @@ Double click - open image preview in separate window or expand/collapse text pre
         self.image_dialogs_count = 0
         self.setToolTip(self.help)
 
+
     def wheelEvent(self, event):
         assert isinstance(event, QWheelEvent)
         if event.modifiers() != QtCore.Qt.NoModifier:
@@ -179,9 +179,6 @@ Double click - open image preview in separate window or expand/collapse text pre
             preview = OutputPreview(output, self)
             self.previews.append(preview)
             layout.addLayout(preview)
-
-    def fs(self):#----------------------------------------------------------------------------------------------------------------------------
-        return
 
     @pyqtSlot()
     def update(self):
@@ -241,7 +238,8 @@ class ActionImage(QLabel):
         self.setObjectName("OutputPreview")
         self.text_preview_expanded = False
 
-    def set_image(self, arr,o):
+
+    def set_image(self, arr, o):
         arr = self.set_3d_image_params(arr)
 
         # remember not to modify arr !!!
@@ -254,8 +252,32 @@ class ActionImage(QLabel):
             pass
             # self.setPixmap(self.image_preview.default_image)  # todo: na pewno to chcemy? moze to nam opozniac interfejs!
         elif isinstance(arr, np.ndarray):
+            if o == 10:
+                arr = arr.clip(0, 255).astype(np.uint8)
+            if o == 20:
+                arr = arr.astype(np.float32).clip(0.0, 1.0)
+            if o == 21:
+                arr = arr.astype(np.float32)
+                min_, max_, _, _ = cv.minMaxLoc(arr.flatten())
+                if min_ == max_:
+                    arr = np.zeros(arr.shape) + 0.5
+                else:
+                    arr = (arr - min_) / (max_ - min_) + min_
+            if o == 22:
+                arr = arr.astype(np.float32)
+                min_, max_, _, _ = cv.minMaxLoc(arr.flatten())
+                if min_ == max_:
+                    arr = np.zeros(arr.shape) + 0.5
+                else:
+                    if len(arr.shape) > 2:
+                        mean = cv.mean(cv.mean(arr)[:3])[0]
+                    else:
+                        mean = cv.mean(arr)[0]
+                    scale = 0.5 / max(max_ - mean, mean - min_)
+                    arr = (arr - mean) * scale + 0.5
+            if o == 23:
+                arr = arr / 255.
             if o == 30:
-                print("loggggggggggggggggg")
                 arr = arr.astype(np.float32)
                 min_, max_, _, _ = cv.minMaxLoc(arr.flatten())
                 if min_ == max_:
@@ -341,30 +363,13 @@ class ActionImage(QLabel):
             self.image_dialog.installEventFilter(self)
             self.previews_container.image_dialogs_count += 1
 
-    def preview_options(self, option,action):
-        # self.previews_container = image_preview.previews_container
-        # self.id = len(image_preview.previews)
-        # self.element = self.previews_container.element
-        #self.image_preview
-        # outpre
-        # self.img = self.default_image
-        # self.previews[0].setPixmap(self.img)
-        # from cvlab.diagram.elements.presentation import ImagePreview
-        # z=ImagePreview()
-        if option==30:
-            print("looooooooog")
-            self.image_preview.edit_option=30
-            # f = action.font()
-            # f.setBold(True)
-            # action.setFont(f)
-
-        if option==0:
-            print("xxlooooooooog")
-            self.image_preview.edit_option=0
-            # f = action.font()
-            # f.setBold(True)
-            # action.setFont(f)
-        self.image_preview.update()
+    def preview_options(self, option,action,x):
+        if option in [0, 10, 20, 21, 22, 23, 30]:
+            for actions in x.actions():
+                actions.setChecked(False)
+            action.setChecked(True)
+            self.image_preview.edit_option = option
+            self.image_preview.update()
 
     def prepare_actions(self, enable=True):
         if enable:
@@ -372,59 +377,32 @@ class ActionImage(QLabel):
             action = QAction('Open in window', self)
             action.triggered.connect(self.open_image_dialog)
             self.addAction(action)
+            action_menu = QAction('Filters for preview', self)
+            filter_menu = QMenu("Preview filters", self)
+            act=[]
+            dic = {'Default preview': 0,
+                   'Truncate to 0-255': 10,
+                   'Truncate to 0-1': 20,
+                   'Scale contrast to 0-1': 21,
+                   'Mean -> 0.5 max/min -> 1/0': 22,
+                   'Divide by 255.0': 23,
+                   '0 -> 0.5, max/min -> 1/0': 30}
+            for key in dic:
+                act.append(self.create_preview_actions(key, dic[key], filter_menu))
 
-            actionMenu = QAction('Modify preview', self)
-
-            x = QMenu("preview modifiers", self)
-            action = QAction('Default preview', self)
-            f = action.font()
-            f.setBold(True)
-            action.setFont(f)
-
-
-           # i = QIcon(":/view/xd.jpg")
-           # StyleManager.icons.set_icon(action, "veil")
-            #print(i.actualSize())
-#            print(i)
-          # # action.setIcon()
-            # except:
-            #     print("log")
-            action.triggered.connect(lambda: self.preview_options(0,action))
-            x.addAction(action)
-
-
-            action = QAction('Truncate to 0-255', self)
-            action.triggered.connect(lambda: self.preview_options(10))
-            x.addAction(action)
-
-            action = QAction('Truncate to 0-1', self)
-            action.triggered.connect(lambda: self.preview_options(20))
-            x.addAction(action)
-
-            action = QAction('Scale contrast to 0-1', self)
-            action.triggered.connect(lambda: self.preview_options(21))
-            x.addAction(action)
-
-            action = QAction('Mean -> 0.5 max/min -> 1/0', self)
-            action.triggered.connect(lambda: self.preview_options(22))
-            x.addAction(action)
-
-            action = QAction('Divide by 255.0', self)
-            action.triggered.connect(lambda: self.preview_options(23))
-            x.addAction(action)
-
-            action = QAction('0 -> 0.5, max/min -> 1/0', self)
-            action.triggered.connect(lambda: self.preview_options(30,action))
-            x.addAction(action)
-
-            # action=QAction(QIcon('xd.jpg'),'xd',self)
-            # x.addAction(action)
-
-            actionMenu.setMenu(x)
-            self.addAction(actionMenu)
-
+            self.image_preview.preview_filters = act
+            for x in act:
+                filter_menu.addAction(x)
+            action_menu.setMenu(filter_menu)
+            self.addAction(action_menu)
         else:
             self.removeAction(self.actions()[0])
+
+    def create_preview_actions(self, key, value, filter_menu):
+        a = QAction(key)
+        a.setCheckable(True)
+        a.triggered.connect(lambda: self.preview_options(value, w, filter_menu))
+        return a
 
     def close_image_dialog(self):
         if self.image_dialog is not None:
@@ -492,9 +470,8 @@ class OutputPreview(QHBoxLayout):
         self.previews.append(ActionImage(self))
         self.img = self.default_image
         self.previews[0].setPixmap(self.img)
-
         self.edit_option = 0
-
+        self.preview_filters = []
         self.all_layouts = []
         self.image_3d_controls_layouts_bool = []
         self.actual_param_3d_image = []
@@ -537,7 +514,6 @@ class OutputPreview(QHBoxLayout):
             if forced or self.previews_container.isVisible() or self.previews[i].image_dialog is not None:
                 for _type, callback in self.preview_callbacks:
                     if isinstance(obj, _type):
-                        print(self.edit_option)
                         callback(self.previews[i], obj, self.edit_option)
 
     def get_preview_objects(self):
