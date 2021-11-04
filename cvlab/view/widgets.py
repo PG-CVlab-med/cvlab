@@ -390,7 +390,7 @@ class ActionImage(QLabel):
             for key in dic:
                 act.append(self.create_preview_actions(key, dic[key], filter_menu))
 
-            self.image_preview.preview_filters = act
+            self.image_preview.preview_filters = act # it is required to submenu to work properly
             for x in act:
                 filter_menu.addAction(x)
             action_menu.setMenu(filter_menu)
@@ -401,7 +401,7 @@ class ActionImage(QLabel):
     def create_preview_actions(self, key, value, filter_menu):
         a = QAction(key)
         a.setCheckable(True)
-        a.triggered.connect(lambda: self.preview_options(value, w, filter_menu))
+        a.triggered.connect(lambda: self.preview_options(value, a, filter_menu))
         return a
 
     def close_image_dialog(self):

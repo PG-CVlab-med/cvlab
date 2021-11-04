@@ -398,7 +398,6 @@ Drag & drop - move element around"""
             and options["preview_size"] != self.preview.preview_size:
                 self.preview.preview_size = options["preview_size"] * dpi_factor
         self.switch_preview(options["show_preview"])
-        print("sd")
         if "edit_option" in options:
             self.preview.previews[-1].edit_option=options["edit_option"]
 
