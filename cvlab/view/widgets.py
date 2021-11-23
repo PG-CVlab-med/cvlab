@@ -437,8 +437,8 @@ class OutputPreview(QHBoxLayout):
 
     def update(self, forced=False):
         objects = self.get_preview_objects()
-        if not objects:
-            objects = [None]
+        if not objects or (len(objects) == 1 and objects[0] is None):
+            objects = []
         self.adjust_number_of_previews(objects)
         for i, obj in enumerate(objects):
             if forced or self.previews_container.isVisible() or self.previews[i].image_dialog is not None:
