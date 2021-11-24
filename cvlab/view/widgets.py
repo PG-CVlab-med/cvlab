@@ -1,16 +1,16 @@
-from distutils.util import strtobool
-
 import cv2
 from PyQt5 import QtCore
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+from distutils.util import strtobool
 
+from . import config
+from . import image_preview
+from .mimedata import *
+from .parameters import GuiFloatParameter, GuiComboboxParameter
 from .. import CVLAB_DIR
 from ..diagram.interface import *
-from .mimedata import *
-from . import image_preview
-from . import config
 
 ALLOW_UPSIZE = True
 
@@ -62,7 +62,7 @@ Drag & drop to another element to connect their inputs/outputs"""
             else:
                 mime_data.setText(Mime.INCOMING_CONNECTION)
             drag.setMimeData(mime_data)
-            drag.setPixmap(QPixmap(1, 1))     # todo: can this hack be removed?
+            drag.setPixmap(QPixmap(1, 1))  # todo: can this hack be removed?
             drag.exec_()
 
     def dropEvent(self, e):
@@ -109,7 +109,7 @@ Drag & drop to another element to connect their inputs/outputs"""
 
     @pyqtSlot()
     def show_hint(self):
-        self.hint.setVisible(True) #to musi byc w tej kolejnosci, bo inaczej hint.width jest losowe :/
+        self.hint.setVisible(True)  # to musi byc w tej kolejnosci, bo inaczej hint.width jest losowe :/
         self.update_hint_position()
         self.hint.raise_()
 
@@ -187,11 +187,11 @@ Double click - open image preview in separate window or expand/collapse text pre
             return
         self.element.state_notified = False  # todo: this must be called by all slots connected to self.element.state_changed
         state = self.element.state
-        #if state == self.element.STATE_READY:
+        # if state == self.element.STATE_READY:
         #    self.update_previews(state)
-        #else:
+        # else:
         #    self.set_outdated()
-        self.update_previews(state) #todo: czy tak, czy lepiej powyzsze z komentarza?
+        self.update_previews(state)  # todo: czy tak, czy lepiej powyzsze z komentarza?
 
     def switch_visibility(self, value):
         if value is None:
@@ -215,7 +215,6 @@ Double click - open image preview in separate window or expand/collapse text pre
 
 
 class ActionImage(QLabel):
-
     DATA_TYPE_IMAGE = 0
     DATA_TYPE_TEXT = 1
     DATA_TYPE_VALUE = 3
@@ -226,8 +225,9 @@ class ActionImage(QLabel):
         self.previews_container = image_preview.previews_container
         self.id = len(image_preview.previews)
         self.element = self.previews_container.element
-        #todo: better Element number than object_id would be appreciated here
-        self.name = "{} {}, Output {}, Image {}".format(self.element.name, str(self.element.object_id), image_preview.output.name, str(self.id))
+        # todo: better Element number than object_id would be appreciated here
+        self.name = "{} {}, Output {}, Image {}".format(self.element.name, str(self.element.object_id),
+                                                        image_preview.output.name, str(self.id))
         self.__connected = False
         self.image_dialog = None
         self.data_type = ActionImage.DATA_TYPE_IMAGE
@@ -237,7 +237,9 @@ class ActionImage(QLabel):
         self.setObjectName("OutputPreview")
         self.text_preview_expanded = False
 
-    def set_image(self, arr):
+    def set_image(self, arr, o):
+        arr = self.set_3d_image_params(arr)
+
         # remember not to modify arr !!!
         if self.data_type != ActionImage.DATA_TYPE_IMAGE:
             self.prepare_actions()
@@ -248,20 +250,55 @@ class ActionImage(QLabel):
             pass
             # self.setPixmap(self.image_preview.default_image)  # todo: na pewno to chcemy? moze to nam opozniac interfejs!
         elif isinstance(arr, np.ndarray):
+            if o == 10:
+                arr = arr.clip(0, 255).astype(np.uint8)
+            if o == 20:
+                arr = arr.astype(np.float32).clip(0.0, 1.0)
+            if o == 21:
+                arr = arr.astype(np.float32)
+                min_, max_, _, _ = cv.minMaxLoc(arr.flatten())
+                if min_ == max_:
+                    arr = np.zeros(arr.shape) + 0.5
+                else:
+                    arr = (arr - min_) / (max_ - min_) + min_
+            if o == 22:
+                arr = arr.astype(np.float32)
+                min_, max_, _, _ = cv.minMaxLoc(arr.flatten())
+                if min_ == max_:
+                    arr = np.zeros(arr.shape) + 0.5
+                else:
+                    if len(arr.shape) > 2:
+                        mean = cv.mean(cv.mean(arr)[:3])[0]
+                    else:
+                        mean = cv.mean(arr)[0]
+                    scale = 0.5 / max(max_ - mean, mean - min_)
+                    arr = (arr - mean) * scale + 0.5
+            if o == 23:
+                arr = arr / 255.
+            if o == 30:
+                arr = arr.astype(np.float32)
+                min_, max_, _, _ = cv.minMaxLoc(arr.flatten())
+                if min_ == max_:
+                    arr = np.zeros(arr.shape) + 0.5
+                else:
+                    scale = 0.5 / max(max_, -min_)
+                    arr = arr * scale + 0.5
+                arr=arr.astype(np.float32)
+
             qpix = image_preview.array_to_pixmap(arr)
             qpix_scaled = self.scale_pixmap(qpix)
             self.setPixmap(qpix_scaled)
             if self.image_dialog is not None:
                 image_preview.imshow(self.name, qpix, show=False)
 
-    def set_text(self, arr):
+    def set_text(self, arr,o):
         if self.data_type != ActionImage.DATA_TYPE_TEXT:
             self.prepare_actions(enable=False)
         self.data_type = ActionImage.DATA_TYPE_TEXT
         self.setText(arr)
         self.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
 
-    def set_bool(self, value):
+    def set_bool(self, value,o):
         if self.data_type != ActionImage.DATA_TYPE_VALUE:
             self.prepare_actions(enable=False)
         self.data_type = ActionImage.DATA_TYPE_VALUE
@@ -271,7 +308,7 @@ class ActionImage(QLabel):
 
     def preprocess_array(self, arr):
         if arr.dtype == np.uint16:
-            arr = cv.convertScaleAbs(arr, alpha=255.0/65535.0)
+            arr = cv.convertScaleAbs(arr, alpha=255.0 / 65535.0)
         elif arr.dtype != np.uint8:
             if arr.dtype in [np.float, np.float32, np.float64]:
                 arr = arr * 255.
@@ -312,7 +349,7 @@ class ActionImage(QLabel):
             self.element.diagram.element_deleted.connect(self.on_element_destroy)
             self.__connected = True
         if self.image_dialog is None:
-            image = self.image_preview.get_preview_objects()[self.id]
+            image = self.set_3d_image_params(self.image_preview.get_preview_objects()[self.id])
             self.image_dialog = image_preview.manager.manager.window(self.name, image=image, position='cursor')
             self.image_dialog.setImage(image)
             settings = config.ConfigWrapper.get_settings()
@@ -324,14 +361,46 @@ class ActionImage(QLabel):
             self.image_dialog.installEventFilter(self)
             self.previews_container.image_dialogs_count += 1
 
+    def preview_options(self, option,action,x):
+        if option in [0, 10, 20, 21, 22, 23, 30]:
+            for actions in x.actions():
+                actions.setChecked(False)
+            action.setChecked(True)
+            self.image_preview.edit_option = option
+            self.image_preview.update()
+
     def prepare_actions(self, enable=True):
         if enable:
             self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
             action = QAction('Open in window', self)
             action.triggered.connect(self.open_image_dialog)
             self.addAction(action)
+            action_menu = QAction('Filters for preview', self)
+            filter_menu = QMenu("Preview filters", self)
+            act=[]
+            dic = {'Default preview': 0,
+                   'Truncate to 0-255': 10,
+                   'Truncate to 0-1': 20,
+                   'Scale contrast to 0-1': 21,
+                   'Mean -> 0.5 max/min -> 1/0': 22,
+                   'Divide by 255.0': 23,
+                   '0 -> 0.5, max/min -> 1/0': 30}
+            for key in dic:
+                act.append(self.create_preview_actions(key, dic[key], filter_menu))
+
+            self.image_preview.preview_filters = act # it is required to submenu to work properly
+            for x in act:
+                filter_menu.addAction(x)
+            action_menu.setMenu(filter_menu)
+            self.addAction(action_menu)
         else:
             self.removeAction(self.actions()[0])
+
+    def create_preview_actions(self, key, value, filter_menu):
+        a = QAction(key)
+        a.setCheckable(True)
+        a.triggered.connect(lambda: self.preview_options(value, a, filter_menu))
+        return a
 
     def close_image_dialog(self):
         if self.image_dialog is not None:
@@ -358,6 +427,25 @@ class ActionImage(QLabel):
         if self.image_dialog is not None:
             self.close_image_dialog()
 
+    def set_3d_image_params(self, arr):
+        if arr is not None and len(arr.shape) == 3 and arr.shape[2] != 3:
+            self.image_preview.add_3d_image_controls(self.id)
+            param_3d_image = self.image_preview.actual_param_3d_image[self.id]
+            axis = param_3d_image[1].value
+            slice_value = param_3d_image[0].value
+            slice = int(round(slice_value * (arr.shape[axis] - 1)))
+            if axis == 0:
+                slice = arr[slice, ...]
+            elif axis == 1:
+                slice = arr[:, slice, ...]
+            elif axis == 2:
+                slice = arr[:, :, slice, ...]
+            else:
+                raise Exception("Unknown 'axis' parameter")
+
+            return slice
+        return arr
+
 
 class OutputPreview(QHBoxLayout):
     default_image = None
@@ -380,7 +468,40 @@ class OutputPreview(QHBoxLayout):
         self.previews.append(ActionImage(self))
         self.img = self.default_image
         self.previews[0].setPixmap(self.img)
-        self.addWidget(self.previews[0])
+        self.edit_option = 0
+        self.preview_filters = []
+        self.all_layouts = []
+        self.image_3d_controls_layouts_bool = []
+        self.actual_param_3d_image = []
+        self.actual_controls_3d_image = []
+
+        self.prepare_3d_image_controls(0)
+
+    def add_3d_image_controls(self, image_id):
+        if not self.image_3d_controls_layouts_bool[image_id]:
+            self.all_layouts[image_id].addLayout(self.actual_controls_3d_image[image_id][0])
+            self.all_layouts[image_id].addLayout(self.actual_controls_3d_image[image_id][1])
+            self.image_3d_controls_layouts_bool[image_id] = True
+
+    def prepare_3d_image_controls(self, image_id):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        layout.addWidget(self.previews[image_id])
+
+        self.actual_param_3d_image.append(
+            [FloatParameter("slice", min_=0, max_=1, step=0.01),
+             ComboboxParameter("axis", [("Z", 0), ("Y", 1), ("X", 2)])])
+        self.actual_controls_3d_image.append(
+            [GuiFloatParameter(self.actual_param_3d_image[image_id][0], self.previews[image_id].element),
+             GuiComboboxParameter(self.actual_param_3d_image[image_id][1], self.previews[image_id].element)])
+        for param in self.actual_param_3d_image[image_id]:
+            param.value_changed.connect(self.previews[image_id].previews_container.update)
+
+        self.image_3d_controls_layouts_bool.append(False)
+        self.all_layouts.append(layout)
+        self.addLayout(layout)
 
     def update(self, forced=False):
         objects = self.get_preview_objects()
@@ -391,10 +512,7 @@ class OutputPreview(QHBoxLayout):
             if forced or self.previews_container.isVisible() or self.previews[i].image_dialog is not None:
                 for _type, callback in self.preview_callbacks:
                     if isinstance(obj, _type):
-                        try:
-                            callback(self.previews[i], obj)
-                        except Exception as e:
-                            print("Cannot update preview: {}".format(e))
+                        callback(self.previews[i], obj, self.edit_option)
 
     def get_preview_objects(self):
         return self.output.get().desequence_all()
@@ -404,9 +522,18 @@ class OutputPreview(QHBoxLayout):
             new_label = ActionImage(self)
             self.addWidget(new_label)
             self.previews.append(new_label)
+
+            index = len(self.previews) - 1
+            self.prepare_3d_image_controls(index)
+
         while len(preview_images) < len(self.previews):
             label_out = self.previews[-1]
             self.previews.pop(-1)
+            self.actual_param_3d_image.pop(-1)
+            self.actual_controls_3d_image.pop(-1)
+            self.image_3d_controls_layouts_bool.pop(-1)
+            self.all_layouts[-1].deleteLater()
+            self.all_layouts.pop(-1)
             # todo: again - a memory leak?
             label_out.deleteLater()
 
@@ -501,6 +628,7 @@ class ElementStatusBar(StyledWidget):
 
     @pyqtSlot()
     def update(self):
-        if not hasattr(self, "element"): return  # fixme: tymczasowy hack, bo leci w tym miejscu wyjątek, nie wiem czemu!
+        if not hasattr(self,
+                       "element"): return  # fixme: tymczasowy hack, bo leci w tym miejscu wyjątek, nie wiem czemu!
         self.element.state_notified = False  # todo: this must be called by all slots connected to self.element.state_changed
         self.set_status(self.element.message)
